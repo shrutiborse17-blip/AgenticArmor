@@ -1,0 +1,23 @@
+# AgenticArmor — Python Dependencies
+# Install: pip install -r requirements.txt
+
+# ── Core API ──────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn==0.30.1
+pydantic==2.7.1
+
+# ── ML Stack ──────────────────────────────────────────────
+scikit-learn==1.5.0
+xgboost==2.0.3
+joblib==1.4.2
+numpy==1.26.4
+pandas==2.2.2
+
+# ── Packet Capture (capture.py) ───────────────────────────
+scapy==2.5.0
+
+# ── LLM Narratives ────────────────────────────────────────
+google-generativeai==0.7.0
+
+# ── HTTP Client (simulate_traffic.py) ────────────────────
+requests==2.32.3

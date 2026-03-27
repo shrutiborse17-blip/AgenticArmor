@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgenticArmor — Live SOC Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#020c14;--bg2:#041828;--bg3:#061e30;--panel:#071f2e;
+    --border:#0d3a52;--border2:#0f4a68;--accent:#00d4ff;--accent2:#00ff9d;
+    --danger:#ff3860;--warn:#ffaa00;--text:#c8e8f5;--text2:#6ea8c8;--text3:#2d6a8a;
+    --mono:'Share Tech Mono',monospace;--head:'Orbitron',sans-serif;--body:'Rajdhani',sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--body);overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:9999;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px)}
+  body::after{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+    background-size:40px 40px}
+  .app{position:relative;z-index:1;display:flex;flex-direction:column;min-height:100vh}
+
+  header{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:60px;
+    background:linear-gradient(90deg,#020c14 0%,#041828 50%,#020c14 100%);
+    border-bottom:1px solid var(--border2);position:sticky;top:0;z-index:100}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-icon{width:36px;height:36px;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;
+    clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);background:rgba(0,212,255,0.1);
+    animation:pulse-border 2s ease-in-out infinite}
+  @keyframes pulse-border{0%,100%{box-shadow:0 0 0 0 rgba(0,212,255,0.4)}50%{box-shadow:0 0 0 8px rgba(0,212,255,0)}}
+  .logo-text{font-family:var(--head);font-size:18px;font-weight:900;letter-spacing:3px;color:var(--accent)}
+  .logo-sub{font-size:10px;color:var(--text3);letter-spacing:2px;font-family:var(--mono)}
+  .status-dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);animation:blink 1s infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+  .status-text{font-family:var(--mono);font-size:11px;color:var(--accent2);letter-spacing:1px}
+  .header-right{display:flex;align-items:center;gap:20px;font-family:var(--mono);font-size:11px;color:var(--text2)}
+  #live-clock{color:var(--accent)}
+  .conn-badge{padding:3px 10px;border-radius:2px;font-family:var(--mono);font-size:10px;border:1px solid}
+  .conn-badge.connected{color:var(--accent2);border-color:var(--accent2);background:rgba(0,255,157,0.08)}
+  .conn-badge.disconnected{color:var(--danger);border-color:var(--danger);background:rgba(255,56,96,0.08)}
+
+  main{display:grid;grid-template-columns:270px 1fr 300px;flex:1}
+
+  /* SIDEBAR */
+  .sidebar{border-right:1px solid var(--border);background:linear-gradient(180deg,var(--bg2) 0%,var(--bg) 100%);
+    padding:14px;display:flex;flex-direction:column;gap:14px}
+  .section-label{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--text3);
+    text-transform:uppercase;padding:0 4px 6px;border-bottom:1px solid var(--border)}
+  .metric-card{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px;position:relative;overflow:hidden}
+  .metric-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;background:var(--accent)}
+  .metric-card.danger::before{background:var(--danger)}
+  .metric-card.warn::before{background:var(--warn)}
+  .metric-card.green::before{background:var(--accent2)}
+  .metric-label{font-size:10px;color:var(--text3);letter-spacing:1px;font-family:var(--mono)}
+  .metric-value{font-family:var(--head);font-size:26px;font-weight:900;color:var(--accent);margin:4px 0 2px}
+  .metric-card.danger .metric-value{color:var(--danger)}
+  .metric-card.warn .metric-value{color:var(--warn)}
+  .metric-card.green .metric-value{color:var(--accent2)}
+  .metric-sub{font-size:11px;color:var(--text2)}
+  .attack-type-list{display:flex;flex-direction:column;gap:6px}
+  .attack-type-row{display:flex;align-items:center;gap:8px;font-size:12px}
+  .attack-type-label{flex:1;color:var(--text2);font-family:var(--mono);font-size:10px}
+  .attack-type-bar-wrap{flex:2;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+  .attack-type-bar{height:100%;border-radius:3px;transition:width 0.8s ease}
+  .attack-type-count{font-family:var(--mono);font-size:10px;color:var(--text3);min-width:24px;text-align:right}
+
+  /* CENTER */
+  .center{display:flex;flex-direction:column}
+  .api-bar{display:flex;align-items:center;gap:12px;padding:8px 20px;background:var(--bg3);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .api-input{flex:1;max-width:380px;background:var(--panel);border:1px solid var(--border2);border-radius:3px;
+    color:var(--text);font-family:var(--mono);font-size:10px;padding:5px 8px;outline:none}
+  .api-input:focus{border-color:var(--accent)}
+  .btn{font-family:var(--mono);font-size:11px;letter-spacing:1px;padding:5px 14px;border-radius:2px;
+    cursor:pointer;transition:all 0.2s;border:1px solid;text-transform:uppercase}
+  .btn-primary{background:rgba(0,212,255,0.1);border-color:var(--accent);color:var(--accent)}
+  .btn-primary:hover{background:rgba(0,212,255,0.25)}
+  .btn-success{background:rgba(0,255,157,0.1);border-color:var(--accent2);color:var(--accent2)}
+  .btn-secondary{background:transparent;border-color:var(--border2);color:var(--text2)}
+  .btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+  .api-status{font-family:var(--mono);font-size:9px;letter-spacing:1px}
+  .api-status.ok{color:var(--accent2)}.api-status.err{color:var(--danger)}.api-status.idle{color:var(--text3)}
+
+  .controls-bar{display:flex;align-items:center;gap:10px;padding:8px 20px;background:var(--bg2);border-bottom:1px solid var(--border)}
+  .separator{flex:1}
+  .speed-label{font-family:var(--mono);font-size:10px;color:var(--text3)}
+  select.speed-select{background:var(--panel);border:1px solid var(--border2);color:var(--text2);
+    font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:2px;cursor:pointer}
+
+  .feed-header{display:flex;align-items:center;gap:12px;padding:8px 20px;border-bottom:1px solid var(--border);background:var(--bg2)}
+  .feed-title{font-family:var(--head);font-size:11px;letter-spacing:2px;color:var(--text2)}
+  .feed-cols{display:grid;grid-template-columns:150px 130px 75px 90px 110px 1fr 90px;
+    gap:0;padding:5px 20px;font-family:var(--mono);font-size:9px;color:var(--text3);
+    letter-spacing:1px;border-bottom:1px solid var(--border);background:var(--bg3)}
+  #traffic-feed{overflow-y:auto;max-height:300px}
+  #traffic-feed::-webkit-scrollbar{width:4px}
+  #traffic-feed::-webkit-scrollbar-thumb{background:var(--border2)}
+  .feed-row{display:grid;grid-template-columns:150px 130px 75px 90px 110px 1fr 90px;
+    gap:0;padding:6px 20px;font-family:var(--mono);font-size:11px;
+    border-bottom:1px solid rgba(13,58,82,0.4);cursor:pointer;transition:background 0.15s;
+    animation:rowSlide 0.3s ease}
+  @keyframes rowSlide{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+  .feed-row:hover{background:rgba(0,212,255,0.05)}
+  .feed-row.threat{background:rgba(255,56,96,0.06);border-left:2px solid var(--danger)}
+  .feed-row.anomaly{background:rgba(255,170,0,0.05);border-left:2px solid var(--warn)}
+  .feed-row.selected{background:rgba(0,212,255,0.08)!important;border-left:2px solid var(--accent)!important}
+  .label-benign{color:var(--accent2)}.label-threat{color:var(--danger);font-weight:bold}.label-anomaly{color:var(--warn)}
+  .cell-conf{color:var(--text3);font-size:10px}
+
+  .detail-panel{border-top:1px solid var(--border2);background:var(--bg2);padding:14px 20px;flex:1}
+  .detail-panel-title{font-family:var(--head);font-size:10px;letter-spacing:2px;color:var(--text2);margin-bottom:10px}
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .detail-box{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:10px}
+  .detail-box-title{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:2px;margin-bottom:8px}
+  .verdict-tag{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:2px;border:1px solid;font-weight:bold;letter-spacing:1px}
+  .verdict-benign{color:var(--accent2);border-color:var(--accent2);background:rgba(0,255,157,0.08)}
+  .verdict-threat{color:var(--danger);border-color:var(--danger);background:rgba(255,56,96,0.08)}
+  .verdict-anomaly{color:var(--warn);border-color:var(--warn);background:rgba(255,170,0,0.08)}
+  .confidence-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+  .confidence-bar-wrap{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+  .confidence-bar{height:100%;border-radius:3px;transition:width 0.8s ease}
+  .narrative-box{background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:12px;grid-column:1/-1;min-height:80px}
+  .narrative-text{font-size:13px;color:var(--text);line-height:1.7}
+  .narrative-source{font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:5px;letter-spacing:1px}
+  .typing-cursor{display:inline-block;width:8px;height:14px;background:var(--accent);margin-left:2px;animation:blink 0.7s infinite;vertical-align:middle}
+
+  /* RIGHT */
+  .right-panel{border-left:1px solid var(--border);background:linear-gradient(180deg,var(--bg2) 0%,var(--bg) 100%);display:flex;flex-direction:column}
+  .rp-section{padding:12px 14px;border-bottom:1px solid var(--border)}
+  .rp-title{font-family:var(--mono);font-size:9px;letter-spacing:3px;color:var(--text3);text-transform:uppercase;margin-bottom:10px}
+  .timeline{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto}
+  .timeline::-webkit-scrollbar{width:3px}.timeline::-webkit-scrollbar-thumb{background:var(--border2)}
+  .tl-item{display:flex;gap:8px;align-items:flex-start}
+  .tl-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+  .tl-dot.threat{background:var(--danger);box-shadow:0 0 6px var(--danger)}
+  .tl-dot.anomaly{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+  .tl-dot.benign{background:var(--accent2)}
+  .tl-type{font-family:var(--mono);font-size:10px;color:var(--text)}
+  .tl-meta{font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:2px}
+  .remediation-log{display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto;flex:1}
+  .remediation-log::-webkit-scrollbar{width:3px}
+  .rem-item{font-family:var(--mono);font-size:10px;padding:5px 7px;
+    background:rgba(0,255,157,0.05);border:1px solid rgba(0,255,157,0.15);
+    border-radius:3px;color:var(--accent2);line-height:1.5;animation:rowSlide 0.3s ease}
+  .rem-time{color:var(--text3);margin-right:5px}
+  .rem-item.critical{background:rgba(255,56,96,0.05);border-color:rgba(255,56,96,0.2);color:var(--danger)}
+
+  .alert-flash{position:fixed;top:70px;right:20px;z-index:9000;
+    background:rgba(255,56,96,0.15);border:1px solid var(--danger);border-radius:4px;
+    padding:10px 16px;font-family:var(--mono);font-size:12px;color:var(--danger);
+    letter-spacing:1px;animation:flashIn 0.3s ease;max-width:300px}
+  @keyframes flashIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+  .alert-flash-title{font-size:11px;font-weight:bold;margin-bottom:3px;text-transform:uppercase}
+  .alert-flash-body{font-size:10px;color:var(--text2)}
+  .empty-state{font-family:var(--mono);font-size:11px;color:var(--text3);padding:14px;text-align:center}
+  ::-webkit-scrollbar{width:4px;height:4px}
+  ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#00d4ff" stroke-width="2" width="18" height="18">
+        <path d="M12 2L2 7v5c0 5.55 3.84 10.74 10 12 6.16-1.26 10-6.45 10-12V7L12 2z"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    </div>
+    <div><div class="logo-text">AGENTICARMOR</div><div class="logo-sub">LIVE SOC OPERATIONS — REAL ML BACKEND</div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="status-dot"></div>
+    <div class="status-text" id="sys-status">CONNECTING TO BACKEND...</div>
+  </div>
+  <div class="header-right">
+    <div class="conn-badge disconnected" id="api-conn-badge">API: OFFLINE</div>
+    <span id="live-clock">--:--:--</span>
+    <span>THREAT: <span id="tl-text" style="color:var(--accent2)">LOW</span></span>
+  </div>
+</header>
+
+<main>
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="section-label">LIVE STATS</div>
+  <div class="metric-card danger"><div class="metric-label">THREATS DETECTED</div><div class="metric-value" id="m-threats">0</div><div class="metric-sub">Real ML detections</div></div>
+  <div class="metric-card warn"><div class="metric-label">ANOMALIES FLAGGED</div><div class="metric-value" id="m-anomalies">0</div><div class="metric-sub">Isolation Forest</div></div>
+  <div class="metric-card green"><div class="metric-label">PACKETS ANALYZED</div><div class="metric-value" id="m-packets">0</div><div class="metric-sub">Total this session</div></div>
+  <div class="metric-card"><div class="metric-label">AVG ANALYSIS TIME</div><div class="metric-value" id="m-latency">—</div><div class="metric-sub">Sub-second detection</div></div>
+  <div class="section-label" style="margin-top:4px">ATTACK TAXONOMY</div>
+  <div class="attack-type-list">
+    <div class="attack-type-row"><span class="attack-type-label">DDoS</span><div class="attack-type-bar-wrap"><div class="attack-type-bar" id="bar-ddos" style="width:0%;background:var(--danger)"></div></div><span class="attack-type-count" id="cnt-ddos">0</span></div>
+    <div class="attack-type-row"><span class="attack-type-label">PORT SCAN</span><div class="attack-type-bar-wrap"><div class="attack-type-bar" id="bar-portscan" style="width:0%;background:var(--warn)"></div></div><span class="attack-type-count" id="cnt-portscan">0</span></div>
+    <div class="attack-type-row"><span class="attack-type-label">BRUTE FORCE</span><div class="attack-type-bar-wrap"><div class="attack-type-bar" id="bar-brute" style="width:0%;background:#ff6b35"></div></div><span class="attack-type-count" id="cnt-brute">0</span></div>
+    <div class="attack-type-row"><span class="attack-type-label">SQL INJECT</span><div class="attack-type-bar-wrap"><div class="attack-type-bar" id="bar-sqli" style="width:0%;background:#c084fc"></div></div><span class="attack-type-count" id="cnt-sqli">0</span></div>
+    <div class="attack-type-row"><span class="attack-type-label">C2 BEACON</span><div class="attack-type-bar-wrap"><div class="attack-type-bar" id="bar-c2" style="width:0%;background:var(--accent)"></div></div><span class="attack-type-count" id="cnt-c2">0</span></div>
+  </div>
+</aside>
+
+<!-- CENTER -->
+<section class="center">
+  <!-- API config bar -->
+  <div class="api-bar">
+    <span style="font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:2px">BACKEND URL</span>
+    <input class="api-input" id="api-url-input" value="http://localhost:8000" placeholder="http://localhost:8000" />
+    <button class="btn btn-success" onclick="checkHealth()">CONNECT</button>
+    <div class="separator"></div>
+    <div class="api-status idle" id="api-status-text">● Run: python main.py to start backend</div>
+  </div>
+
+  <div class="controls-bar">
+    <button class="btn btn-primary" id="btn-start" onclick="startPolling()">▶ START LIVE FEED</button>
+    <button class="btn" style="background:rgba(255,56,96,0.1);border-color:var(--danger);color:var(--danger)" id="btn-stop" onclick="stopPolling()" disabled>■ STOP</button>
+    <button class="btn btn-secondary" onclick="clearAll()">✕ CLEAR</button>
+    <span class="speed-label">POLL RATE:</span>
+    <select class="speed-select" id="speed-select" onchange="updateSpeed()">
+      <option value="2000">2s</option>
+      <option value="1000" selected>1s</option>
+      <option value="500">0.5s</option>
+    </select>
+    <div class="separator"></div>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">⬡ Powered by Real Random Forest + Isolation Forest</span>
+  </div>
+
+  <div class="feed-header">
+    <div class="feed-title">REAL-TIME ML CLASSIFICATION FEED</div>
+    <div style="flex:1"></div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">↑ Click row to inspect</div>
+  </div>
+  <div class="feed-cols">
+    <span>SRC IP</span><span>DST IP</span><span>PORT</span><span>PROTOCOL</span><span>RF VERDICT</span><span>ISO SCORE</span><span>CONFIDENCE</span>
+  </div>
+  <div id="traffic-feed"><div class="empty-state">[ Connect backend and start feed ]</div></div>
+
+  <div class="detail-panel">
+    <div class="detail-panel-title">THREAT ANALYSIS DETAIL</div>
+    <div class="detail-grid" id="detail-grid">
+      <div class="detail-box"><div class="detail-box-title">RANDOM FOREST VERDICT</div><div id="rf-verdict"><span style="font-family:var(--mono);font-size:11px;color:var(--text3)">No packet selected</span></div></div>
+      <div class="detail-box"><div class="detail-box-title">ISOLATION FOREST (ZERO-DAY)</div><div id="iso-verdict"><span style="font-family:var(--mono);font-size:11px;color:var(--text3)">No packet selected</span></div></div>
+      <div class="narrative-box">
+        <div class="detail-box-title">⬡ GEMINI SOC COPILOT — ATTACK NARRATIVE</div>
+        <div class="narrative-text" id="narrative-text" style="color:var(--text3);font-family:var(--mono);font-size:11px">Select a threat to view AI-generated attack narrative...</div>
+        <div class="narrative-source" id="narrative-source"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RIGHT -->
+<aside class="right-panel">
+  <div class="rp-section">
+    <div class="rp-title">THREAT TIMELINE</div>
+    <div class="timeline" id="threat-timeline"><div class="empty-state">No threats yet</div></div>
+  </div>
+  <div class="rp-section" style="flex:1">
+    <div class="rp-title">AUTONOMOUS REMEDIATION LOG</div>
+    <div class="remediation-log" id="remediation-log"><div class="empty-state">Awaiting triggers...</div></div>
+  </div>
+</aside>
+</main>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────
+let API_BASE = 'http://localhost:8000';
+let pollInterval = null;
+let pollSpeed = 1000;
+let isConnected = false;
+let latencies = [];
+
+// Stats mirrored from backend
+const localStats = {threats:0, anomalies:0, packets:0, latencySum:0,
+  ddos:0, portscan:0, bruteforce:0, sqlinjection:0, c2_heartbeat:0};
+
+// ── CLOCK ─────────────────────────────────────────────────────────────
+setInterval(()=>{ document.getElementById('live-clock').textContent = new Date().toLocaleTimeString('en-IN',{hour12:false}); }, 1000);
+
+// ── FEATURE GENERATION (mirrors train_models.py distributions) ────────
+const N = 78;
+function zeros(){ return new Array(N).fill(0); }
+function noise(f, std=0.3){ return f.map(v=>Math.max(0, v+((Math.random()-0.5)*2*std))); }
+
+function makeBenign(){
+  let f=zeros(); f[0]=r([80,443,53,123]); f[1]=r([6,17]); f[2]=ri(1000,100000);
+  f[3]=ri(1,50); f[4]=ri(1,50); f[5]=ri(100,5000); f[16]=ru(10,500); f[52]=ri(0,10);
+  return noise(f);
+}
+function makeDDOS(){
+  let f=zeros(); f[0]=r([80,443,53]); f[1]=17; f[2]=ri(100,5000);
+  f[3]=ri(3000,10000); f[4]=ri(0,5); f[5]=ri(100000,500000); f[16]=ru(5000,15000); f[48]=ri(500,2000); f[7]=ri(40,60);
+  return noise(f,0.5);
+}
+function makePortScan(){
+  let f=zeros(); f[0]=ri(1,65535); f[1]=6; f[2]=ri(10,500);
+  f[3]=ri(1,3); f[4]=ri(0,2); f[5]=ri(40,80); f[16]=ru(1,50); f[48]=1; f[52]=0; f[45]=ri(0,2);
+  return noise(f,0.3);
+}
+function makeBrute(){
+  let f=zeros(); f[0]=r([22,21,3389,23]); f[1]=6; f[2]=ri(500,3000);
+  f[3]=ri(10,100); f[4]=ri(10,100); f[5]=ri(1000,8000); f[16]=ru(20,200); f[48]=ri(1,5); f[52]=ri(5,50); f[18]=ru(100,500);
+  return noise(f,0.3);
+}
+function makeSQLI(){
+  let f=zeros(); f[0]=r([3306,5432,1433,80,443]); f[1]=6; f[2]=ri(5000,50000);
+  f[3]=ri(5,30); f[4]=ri(5,30); f[5]=ri(5000,50000); f[7]=ri(500,5000); f[51]=ri(5,20);
+  return noise(f,0.3);
+}
+function makeC2(){
+  let f=zeros(); f[0]=r([443,8443,4444,8080]); f[1]=6; f[2]=ri(28000,32000);
+  f[3]=ri(2,6); f[4]=ri(2,6); f[5]=ri(110,130); f[16]=ru(0.1,0.5); f[18]=ru(28000,32000);
+  return noise(f,0.2);
+}
+function r(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+function ri(a,b){ return Math.floor(Math.random()*(b-a)+a); }
+function ru(a,b){ return Math.random()*(b-a)+a; }
+
+const ATTACK_MAKERS = [
+  {fn:makeDDOS, src:()=>extIP(), port:()=>r([80,443,53]), proto:'UDP', pps:()=>ru(3000,10000), label:'DDoS'},
+  {fn:makePortScan, src:()=>extIP(), port:()=>ri(1,1024), proto:'TCP', pps:()=>ru(10,50), label:'PortScan'},
+  {fn:makeBrute, src:()=>extIP(), port:()=>r([22,21,3389]), proto:'TCP', pps:()=>ru(20,100), label:'BruteForce'},
+  {fn:makeSQLI, src:()=>extIP(), port:()=>r([3306,5432]), proto:'TCP', pps:()=>ru(1,10), label:'SQLInjection'},
+  {fn:makeC2, src:()=>intIP(), port:()=>r([443,8443]), proto:'HTTPS', pps:()=>ru(0.1,0.5), label:'C2_Heartbeat'},
+];
+function extIP(){ return `203.0.${ri(1,255)}.${ri(1,254)}`; }
+function intIP(){ return `192.168.1.${ri(2,30)}`; }
+function dstIP(){ return r(['10.0.0.1','10.0.0.2','192.168.10.50']); }
+
+// ── HEALTH CHECK ──────────────────────────────────────────────────────
+async function checkHealth(){
+  API_BASE = document.getElementById('api-url-input').value.trim().replace(/\/$/,'');
+  const statusEl = document.getElementById('api-status-text');
+  const badge = document.getElementById('api-conn-badge');
+  statusEl.textContent = '● Connecting...'; statusEl.className='api-status idle';
+  try {
+    const r = await fetch(`${API_BASE}/health`, {signal: AbortSignal.timeout(3000)});
+    const d = await r.json();
+    if(d.status === 'ok' && d.models_loaded){
+      isConnected = true;
+      badge.textContent = 'API: ONLINE'; badge.className='conn-badge connected';
+      statusEl.textContent = `● CONNECTED — Models loaded | Gemini: ${d.gemini_connected?'YES':'NO'}`;
+      statusEl.className = 'api-status ok';
+      document.getElementById('sys-status').textContent = 'LIVE ML BACKEND CONNECTED';
+    } else {
+      throw new Error('Models not loaded');
+    }
+  } catch(e) {
+    isConnected = false;
+    badge.textContent = 'API: OFFLINE'; badge.className='conn-badge disconnected';
+    statusEl.textContent = `● OFFLINE — Run: python main.py (${e.message})`;
+    statusEl.className = 'api-status err';
+  }
+}
+
+// ── POLLING ───────────────────────────────────────────────────────────
+async function pollOnce(){
+  if(!isConnected){ await checkHealth(); if(!isConnected) return; }
+
+  const isAttack = Math.random() < 0.30;
+  let src, dst, port, proto, pps, features, rawLog;
+
+  if(!isAttack){
+    features = makeBenign(); src=intIP(); dst=dstIP(); port=r([80,443,53,123]); proto='TCP'; pps=ru(10,200);
+    rawLog=`${src} → ${dst}:${port} | Normal ${proto} session`;
+  } else {
+    const atk = ATTACK_MAKERS[Math.floor(Math.random()*ATTACK_MAKERS.length)];
+    features=atk.fn(); src=atk.src(); dst=dstIP(); port=atk.port(); proto=atk.proto; pps=atk.pps();
+    rawLog=`${src} → ${dst}:${port} | ${atk.label} | ${pps.toFixed(0)} pkt/s | ${proto}`;
+  }
+
+  try {
+    const t0 = performance.now();
+    const resp = await fetch(`${API_BASE}/analyze`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ features, raw_log:rawLog, src_ip:src, dst_ip:dst,
+        dst_port:parseInt(port), protocol:proto, packets_per_sec:pps }),
+      signal: AbortSignal.timeout(8000)
+    });
+    const result = await resp.json();
+    const elapsed = performance.now()-t0;
+
+    localStats.packets++;
+    if(result.threat_detected) {
+      localStats.threats++;
+      const key = result.rf_prediction.toLowerCase().replace('_','');
+      if(localStats.hasOwnProperty(key)) localStats[key]++;
+    }
+    if(result.iso_prediction==='ANOMALY') localStats.anomalies++;
+    latencies.push(elapsed); if(latencies.length>20) latencies.shift();
+
+    renderRow(result, src, dst, port, proto, pps);
+    updateStats(result, elapsed);
+    if(result.threat_detected){
+      addTimeline(result, src, port);
+      if(result.remediation_actions?.length) addRemediation(result);
+      if(['CRITICAL','HIGH'].includes(result.threat_level)) showAlert(result, src);
+    }
+  } catch(e){
+    isConnected = false;
+    document.getElementById('api-conn-badge').textContent='API: OFFLINE';
+    document.getElementById('api-conn-badge').className='conn-badge disconnected';
+  }
+}
+
+function startPolling(){
+  if(!isConnected){ checkHealth().then(()=>{ if(isConnected) _startPoll(); }); }
+  else _startPoll();
+}
+function _startPoll(){
+  document.getElementById('btn-start').disabled=true;
+  document.getElementById('btn-stop').disabled=false;
+  document.getElementById('traffic-feed').innerHTML='';
+  pollInterval = setInterval(pollOnce, pollSpeed);
+}
+function stopPolling(){
+  clearInterval(pollInterval); pollInterval=null;
+  document.getElementById('btn-start').disabled=false;
+  document.getElementById('btn-stop').disabled=true;
+}
+function updateSpeed(){
+  pollSpeed=parseInt(document.getElementById('speed-select').value);
+  if(pollInterval){ stopPolling(); _startPoll(); }
+}
+function clearAll(){
+  stopPolling();
+  document.getElementById('traffic-feed').innerHTML='<div class="empty-state">[ Connect backend and start feed ]</div>';
+  document.getElementById('threat-timeline').innerHTML='<div class="empty-state">No threats yet</div>';
+  document.getElementById('remediation-log').innerHTML='<div class="empty-state">Awaiting triggers...</div>';
+  document.getElementById('narrative-text').textContent='Select a threat to view AI-generated attack narrative...';
+  document.getElementById('rf-verdict').innerHTML='<span style="font-family:var(--mono);font-size:11px;color:var(--text3)">No packet selected</span>';
+  document.getElementById('iso-verdict').innerHTML='<span style="font-family:var(--mono);font-size:11px;color:var(--text3)">No packet selected</span>';
+  Object.keys(localStats).forEach(k=>{ if(typeof localStats[k]==='number') localStats[k]=0; });
+  latencies=[];
+  updateMetricDisplay();
+}
+
+// ── RENDER ROW ────────────────────────────────────────────────────────
+function renderRow(result, src, dst, port, proto, pps){
+  const feed = document.getElementById('traffic-feed');
+  const empty = feed.querySelector('.empty-state'); if(empty) empty.remove();
+
+  const cls = result.threat_detected ? (result.iso_prediction==='ANOMALY'?'anomaly':'threat') : '';
+  const labelCls = result.threat_detected ? (result.iso_prediction==='ANOMALY'?'label-anomaly':'label-threat') : 'label-benign';
+  const ts = new Date().toLocaleTimeString('en-IN',{hour12:false});
+
+  const row = document.createElement('div');
+  row.className = `feed-row ${cls}`;
+  row.innerHTML = `
+    <span style="color:var(--text2)">${src}</span>
+    <span style="color:var(--text2)">${dst}</span>
+    <span style="color:var(--text3)">${port}</span>
+    <span style="color:var(--accent)">${proto}</span>
+    <span class="${labelCls}">${result.rf_prediction}</span>
+    <span style="color:${parseFloat(result.iso_score)<0?'var(--warn)':'var(--text3)'}">${result.iso_score}</span>
+    <span class="cell-conf">${result.rf_confidence.toFixed(1)}%</span>
+  `;
+  row.addEventListener('click', ()=>{ document.querySelectorAll('.feed-row.selected').forEach(r=>r.classList.remove('selected')); row.classList.add('selected'); renderDetail(result, src, port, pps); });
+  feed.insertBefore(row, feed.firstChild);
+  while(feed.children.length>60) feed.removeChild(feed.lastChild);
+}
+
+// ── RENDER DETAIL ─────────────────────────────────────────────────────
+function renderDetail(result, src, port, pps){
+  const rfDiv = document.getElementById('rf-verdict');
+  const rfCls = result.rf_prediction==='BENIGN'?'verdict-benign':result.iso_prediction==='ANOMALY'?'verdict-anomaly':'verdict-threat';
+  rfDiv.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span class="verdict-tag ${rfCls}">${result.rf_prediction}</span>
+      <span style="font-size:12px;color:var(--text2)">${result.threat_level} threat level</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">CONF</span>
+      <div class="confidence-bar-wrap"><div class="confidence-bar" style="width:${result.rf_confidence}%;background:${result.rf_prediction==='BENIGN'?'var(--accent2)':result.iso_prediction==='ANOMALY'?'var(--warn)':'var(--danger)'}"></div></div>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">${result.rf_confidence.toFixed(1)}%</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:6px">Analysis: ${result.analysis_time_ms}ms</div>
+  `;
+  const isoDiv = document.getElementById('iso-verdict');
+  isoDiv.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span class="verdict-tag ${result.iso_prediction==='ANOMALY'?'verdict-anomaly':'verdict-benign'}">${result.iso_prediction}</span>
+    </div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text2)">Score: <span style="color:${parseFloat(result.iso_score)<0?'var(--warn)':'var(--accent2)'}">${result.iso_score}</span></div>
+    <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:4px">${parseFloat(result.iso_score)<0?'⚠ Below anomaly threshold':'✓ Within normal bounds'}</div>
+  `;
+  // Narrative
+  const narEl = document.getElementById('narrative-text');
+  if(result.narrative){
+    narEl.className='narrative-text'; narEl.textContent='';
+    let i=0; const t=setInterval(()=>{ narEl.textContent+=result.narrative[i]; i++; if(i>=result.narrative.length) clearInterval(t); }, 10);
+    document.getElementById('narrative-source').textContent = `⬡ Source: ${result.narrative_source}`;
+  } else {
+    narEl.textContent='No narrative generated for benign traffic.';
+    document.getElementById('narrative-source').textContent='';
+  }
+}
+
+// ── STATS ─────────────────────────────────────────────────────────────
+function updateStats(result, elapsed){
+  updateMetricDisplay();
+  // latency display
+  const avg = latencies.reduce((a,b)=>a+b,0)/latencies.length;
+  document.getElementById('m-latency').textContent = avg.toFixed(0)+'ms';
+}
+function updateMetricDisplay(){
+  document.getElementById('m-threats').textContent = localStats.threats;
+  document.getElementById('m-anomalies').textContent = localStats.anomalies;
+  document.getElementById('m-packets').textContent = localStats.packets.toLocaleString();
+  const keys=['ddos','portscan','bruteforce','sqlinjection','c2_heartbeat'];
+  const ids=['ddos','portscan','brute','sqli','c2'];
+  const total=keys.reduce((s,k)=>s+localStats[k],0)||1;
+  keys.forEach((k,i)=>{
+    document.getElementById('cnt-'+ids[i]).textContent=localStats[k];
+    document.getElementById('bar-'+ids[i]).style.width=(localStats[k]/total*100)+'%';
+  });
+  const tl=document.getElementById('tl-text');
+  if(localStats.threats>20){tl.textContent='CRITICAL';tl.style.color='var(--danger)'}
+  else if(localStats.threats>10){tl.textContent='HIGH';tl.style.color='var(--warn)'}
+  else if(localStats.threats>4){tl.textContent='MEDIUM';tl.style.color='#ffaa00'}
+  else{tl.textContent='LOW';tl.style.color='var(--accent2)'}
+}
+
+// ── TIMELINE ──────────────────────────────────────────────────────────
+function addTimeline(result, src, port){
+  const tl=document.getElementById('threat-timeline');
+  const empty=tl.querySelector('.empty-state'); if(empty) empty.remove();
+  const item=document.createElement('div'); item.className='tl-item';
+  const dotCls=result.iso_prediction==='ANOMALY'?'anomaly':'threat';
+  item.innerHTML=`<div class="tl-dot ${dotCls}"></div><div class="tl-content"><div class="tl-type">${result.rf_prediction} — ${src}</div><div class="tl-meta">port ${port} | ${result.threat_level} | ${new Date().toLocaleTimeString('en-IN',{hour12:false})}</div></div>`;
+  tl.insertBefore(item, tl.firstChild);
+  while(tl.children.length>15) tl.removeChild(tl.lastChild);
+}
+
+// ── REMEDIATION ───────────────────────────────────────────────────────
+function addRemediation(result){
+  const log=document.getElementById('remediation-log');
+  const empty=log.querySelector('.empty-state'); if(empty) empty.remove();
+  result.remediation_actions.slice(0,2).forEach(action=>{
+    const item=document.createElement('div');
+    item.className='rem-item'+(result.threat_level==='CRITICAL'?' critical':'');
+    item.innerHTML=`<span class="rem-time">[${new Date().toLocaleTimeString('en-IN',{hour12:false})}]</span>${action}`;
+    log.insertBefore(item, log.firstChild);
+  });
+  while(log.children.length>15) log.removeChild(log.lastChild);
+}
+
+// ── ALERT FLASH ───────────────────────────────────────────────────────
+let alertTimer=null;
+function showAlert(result, src){
+  const ex=document.querySelector('.alert-flash'); if(ex) ex.remove();
+  if(alertTimer) clearTimeout(alertTimer);
+  const f=document.createElement('div'); f.className='alert-flash';
+  f.innerHTML=`<div class="alert-flash-title">⚠ ${result.threat_level} — ${result.rf_prediction}</div><div class="alert-flash-body">SRC: ${src} | RF Conf: ${result.rf_confidence.toFixed(1)}% | ISO: ${result.iso_score}<br>${result.remediation_actions[0]||''}</div>`;
+  document.body.appendChild(f);
+  alertTimer=setTimeout(()=>f.remove(), 5000);
+}
+
+// Init
+checkHealth();
+</script>
+</body>
+</html>
