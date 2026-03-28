@@ -29,6 +29,47 @@ import json
 from datetime import datetime
 from collections import defaultdict
 
+import google.generativeai as genai
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if GEMINI_API_KEY:
+    genai.configure(api_key=GEMINI_API_KEY)
+
+async def get_gemini_narrative(label, src_ip, port, protocol, pps, confidence, iso_score, raw_log):
+    try:
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        prompt = f"""
+You are a cybersecurity SOC analyst.
+
+Analyze this network traffic:
+
+Attack Type: {label}
+Source IP: {src_ip}
+Port: {port}
+Protocol: {protocol}
+Packets/sec: {pps}
+Confidence: {confidence}%
+Anomaly Score: {iso_score}
+
+Explain:
+1. What is happening
+2. Why it is dangerous
+3. What should be done
+
+Keep it short (2-3 lines).
+"""
+
+        response = model.generate_content(prompt)
+        return response.text.strip()
+
+    except Exception as e:
+        print("Gemini error:", e)
+        return ""
 # ── .env support ─────────────────────────────────────────────────────────
 try:
     from dotenv import load_dotenv
